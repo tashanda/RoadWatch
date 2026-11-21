@@ -1,38 +1,42 @@
+
 #include "imu.h"
 
-#include <Adafruit_MPU6050.h>
+#include <Adafruit_BNO055.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
 
 #include "config.h"
 
 namespace {
-Adafruit_MPU6050 sensor;
+Adafruit_BNO055 sensor(55, 0x28);
 }
 
 bool beginImu() {
   Wire.begin(config::kI2cSdaPin, config::kI2cSclPin);
+
   if (!sensor.begin()) {
     return false;
   }
 
-  sensor.setAccelerometerRange(MPU6050_RANGE_8_G);
-  sensor.setGyroRange(MPU6050_RANGE_500_DEG);
-  sensor.setFilterBandwidth(MPU6050_BAND_21_HZ);
+  sensor.setExtCrystalUse(true);
   return true;
 }
 
 bool readImu(ImuReading& reading) {
-  sensors_event_t acceleration;
-  sensors_event_t gyroscope;
-  sensors_event_t temperature;
-  sensor.getEvent(&acceleration, &gyroscope, &temperature);
+  imu::Vector<3> accel =
+      sensor.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
 
-  reading.accelX = acceleration.acceleration.x;
-  reading.accelY = acceleration.acceleration.y;
-  reading.accelZ = acceleration.acceleration.z;
-  reading.gyroX = gyroscope.gyro.x;
-  reading.gyroY = gyroscope.gyro.y;
-  reading.gyroZ = gyroscope.gyro.z;
+  imu::Vector<3> gyro =
+      sensor.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
+
+  reading.accelX = accel.x();
+  reading.accelY = accel.y();
+  reading.accelZ = accel.z();
+
+  // BNO055 gyroscope readings are in rad/s.
+  reading.gyroX = gyro.x();
+  reading.gyroY = gyro.y();
+  reading.gyroZ = gyro.z();
+
   return true;
 }
