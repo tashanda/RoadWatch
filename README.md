@@ -84,7 +84,7 @@ The test suite uses a temporary SQLite database and does not change your local d
 
 ## Community pothole reports and API
 
-- `GET /api/health` — Next.js service status
+- `GET /api/health` — read-only Supabase readiness check for required tables and the private reports bucket
 - `GET /api/events?severity=high&limit=200` — list events (severity and limit are optional)
 - `GET /api/events/{id}` — retrieve one event
 - `POST /api/events` — validate and save a detection

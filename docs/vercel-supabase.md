@@ -66,10 +66,10 @@ npm run test:geo
 npm run build
 ```
 
-The API tests use fake storage and do not require Supabase credentials. Once
-the approved source changes are pushed and the Vercel environment is
-configured, deploy through the existing Vercel project. This repository task
-does not push or deploy.
+The API tests use fake storage and do not require Supabase credentials. Once the source changes are pushed and the Vercel environment is configured,
+deploy through the existing Vercel project. Environment-variable changes apply
+to new deployments, so create a fresh Production deployment after adding or
+changing variables.
 
 After deployment, verify:
 
@@ -80,10 +80,21 @@ https://<vercel-domain>/api/reports?limit=10
 https://<vercel-domain>/api/device-events?limit=10
 ```
 
-The API list endpoints return an explicit service-unavailable error if
-Supabase is not configured; they do not return simulated data as if it were
+`GET /api/health` performs read-only checks for the required database tables
+and confirms `roadwatch-reports` exists and is private. It returns HTTP 503 if
+the Supabase credentials, permissions, schema, or bucket configuration are not
+ready. The API list endpoints also return an explicit service-unavailable
+error on Supabase failures; they do not return simulated data as if it were
 production data. Drive Mode's simulation remains a separate, visibly marked
 feature.
+
+If the readiness check logs a table permission error, verify that
+`SUPABASE_SERVICE_ROLE_KEY` is the service-role key for the same project as
+`SUPABASE_URL` (not the anon key) and that `supabase/schema.sql` was run in that
+project. For an existing project, run
+`supabase/migrations/20261121160000_roadwatch_service_role_permissions.sql` in
+the Supabase SQL Editor to reapply the least-privilege grants. Keep the key in
+Vercel Production variables only; do not share or commit it.
 
 ## 4. Configure the ESP32
 

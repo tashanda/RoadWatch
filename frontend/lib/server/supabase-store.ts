@@ -49,6 +49,31 @@ export type DeviceEventRow = {
   received_at: string;
 };
 
+export type ReadinessClient = {
+  from: (table: string) => {
+    select: (
+      columns: string,
+      options: { head: true; count: "exact" },
+    ) => PromiseLike<{ error: { message: string } | null }>;
+  };
+  storage: {
+    getBucket: (
+      id: string,
+    ) => PromiseLike<{
+      data: { public: boolean } | null;
+      error: { message: string } | null;
+    }>;
+  };
+};
+
+const readinessTables = [
+  ["events", "id"],
+  ["community_reports", "id"],
+  ["device_events", "event_id"],
+  ["report_upload_tickets", "id"],
+  ["api_rate_limits", "key"],
+] as const;
+
 export interface RoadWatchStore {
   consumeRateLimit(key: string, limit: number, windowSeconds: number): Promise<boolean>;
   createSignedUpload(path: string): Promise<string>;
@@ -114,6 +139,37 @@ export function getSupabaseAdmin(): SupabaseClient {
 
 function storageBucket(): string {
   return requiredEnvironment("SUPABASE_STORAGE_BUCKET");
+}
+
+export async function checkSupabaseReadiness(
+  client: ReadinessClient = getSupabaseAdmin(),
+  bucket = storageBucket(),
+): Promise<void> {
+  if (bucket !== "roadwatch-reports") {
+    throw new Error("The configured Supabase Storage bucket is not roadwatch-reports.");
+  }
+
+  const [tableChecks, bucketCheck] = await Promise.all([
+    Promise.all(
+      readinessTables.map(async ([table, column]) => {
+        const { error } = await client
+          .from(table)
+          .select(column, { head: true, count: "exact" });
+        if (error) {
+          throw new Error(`Supabase table "${table}" is unavailable: ${error.message}`);
+        }
+      }),
+    ),
+    client.storage.getBucket(bucket),
+  ]);
+
+  throwOnError(bucketCheck.error);
+  if (!bucketCheck.data) {
+    throw new Error("The configured Supabase Storage bucket was not found.");
+  }
+  if (bucketCheck.data.public) {
+    throw new Error("The configured Supabase Storage bucket must be private.");
+  }
 }
 
 export function createSupabaseStore(

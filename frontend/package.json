@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "test:geo": "node --test app/components/geo.test.mjs",
-    "test:api": "vitest run lib/server/reports.test.ts"
+    "test:api": "vitest run lib/server"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.2",
