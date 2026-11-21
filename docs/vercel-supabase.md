@@ -106,13 +106,20 @@ Copy `firmware/include/secrets.example.h` to the ignored
 - `ROADWATCH_BACKEND_URL` to the Vercel origin, such as
   `https://roadwatch.example`, without `/api/device-events`.
 - `ROADWATCH_DEVICE_TOKEN` to the same value configured in Vercel.
-- `ROADWATCH_BACKEND_ROOT_CA` to the trusted root certificate for the
-  Vercel-hosted HTTPS endpoint.
 
-The firmware posts to `/api/device-events`. Keep this token out of GitHub and
-out of all browser-visible variables. Wi-Fi can be unavailable while driving;
-device events are queued only in RAM and are not guaranteed to survive power
-loss or queue saturation.
+The firmware uses the public Google Trust Services GTS Root R1 certificate
+embedded in `firmware/include/backend_root_ca.h` to validate the Vercel TLS
+chain. The server does not send its trust root; the chain was verified against
+the system and certifi trust stores. `WiFiClientSecure` keeps certificate and
+hostname verification enabled. This public CA certificate is not a secret.
+
+Certificate validation requires a valid system clock. After Wi-Fi connects,
+the uploader starts SNTP synchronization using `pool.ntp.org` and
+`time.nist.gov`; it will not send an event until the clock is valid. The ESP32
+needs internet access to synchronize time. Keep the device token out of GitHub
+and browser-visible variables. Wi-Fi can be unavailable while driving; device
+events are queued only in RAM and are not guaranteed to survive power loss or
+queue saturation.
 
 ## 5. Test a photo report from iPhone Safari
 

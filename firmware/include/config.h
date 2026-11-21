@@ -6,6 +6,8 @@
 #include "secrets.h"
 #endif
 
+#include "backend_root_ca.h"
+
 #ifndef ROADWATCH_WIFI_SSID
 #define ROADWATCH_WIFI_SSID ""
 #endif
@@ -20,10 +22,6 @@
 
 #ifndef ROADWATCH_DEVICE_TOKEN
 #define ROADWATCH_DEVICE_TOKEN ""
-#endif
-
-#ifndef ROADWATCH_BACKEND_ROOT_CA
-#define ROADWATCH_BACKEND_ROOT_CA ""
 #endif
 
 #ifndef ROADWATCH_BNO055_ADDRESS
@@ -53,7 +51,7 @@ constexpr const char* kWifiSsid = ROADWATCH_WIFI_SSID;
 constexpr const char* kWifiPassword = ROADWATCH_WIFI_PASSWORD;
 constexpr const char* kBackendUrl = ROADWATCH_BACKEND_URL;
 constexpr const char* kDeviceToken = ROADWATCH_DEVICE_TOKEN;
-constexpr const char* kBackendRootCa = ROADWATCH_BACKEND_ROOT_CA;
+constexpr const char* kBackendRootCa = kBackendRootCaPem;
 constexpr const char* kDeviceId = "roadwatch-esp32-01";
 constexpr uint32_t kWifiReconnectIntervalMs = 15000;
 constexpr uint32_t kHttpTimeoutMs = 5000;
