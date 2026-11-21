@@ -34,3 +34,18 @@ Secure the IMU firmly to the vehicle so its orientation does not shift during a 
 - Check polarity and ground connections before power-up. Stop if board labels or electrical specifications are unclear.
 
 The wiring above is provisional and must be verified before powering or flashing the device.
+
+## Wi-Fi and HTTPS uploads
+
+The firmware's optional uploader connects through the ESP32 Arduino `WiFi` library and posts queued candidate events to `https://<backend>/api/device-events`. It runs on a separate FreeRTOS task so connection attempts and HTTP timeouts do not pause IMU sampling. HTTPS certificate verification is enabled; provide the backend's trusted root CA in the local secrets header rather than disabling verification.
+
+1. Copy `firmware/include/secrets.example.h` to `firmware/include/secrets.h`. The latter is ignored by Git.
+2. Set `ROADWATCH_WIFI_SSID` and `ROADWATCH_WIFI_PASSWORD` to a regular Wi-Fi network or phone hotspot.
+3. Set `ROADWATCH_BACKEND_URL` to the HTTPS origin only (for example `https://roadwatch-api.onrender.com`), `ROADWATCH_DEVICE_TOKEN` to the same random token configured as `ROADWATCH_DEVICE_TOKEN` on FastAPI, and `ROADWATCH_BACKEND_ROOT_CA` to the PEM CA certificate trusted by the backend host.
+4. Configure the FastAPI CORS origins for your website separately. CORS is not used for device authentication; the firmware token is sent in `X-Device-Token`.
+
+The uploader waits for an NTP-synchronized UTC clock before accepting candidate events, includes null coordinates when there is no GPS fix, uses a generated UUID consistently across retries, and retries up to five times with increasing delays. Its queue is in RAM: power loss, a full queue, unavailable Wi-Fi, or exhausted retries can lose candidate events. The uploader does not establish a Wi-Fi connection until credentials and a valid HTTPS CA are configured.
+
+`queueCandidate(...)` is the integration point for a future, verified detector. The current firmware only emits raw IMU/GPS samples and does not call it. Do not send every raw sample as a pothole or treat its output as a safety system. First confirm the actual IMU model and wiring, calibrate the installed sensor, then implement and validate a detector before enqueueing candidates.
+
+Wi-Fi may come from a phone hotspot or a regular network, but network access is not guaranteed while the vehicle is moving. Do not rely on cloud uploads during a drive; any queued events are best-effort and are not durably buffered on the device.

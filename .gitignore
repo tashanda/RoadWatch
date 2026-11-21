@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+*.db
+*.db-shm
+*.db-wal
 
 # Node.js / Next.js
 node_modules/
@@ -12,9 +15,11 @@ npm-debug.log*
 
 # PlatformIO
 .pio/
+firmware/include/secrets.h
 
 # Local data and environment files
 data/*
+backend/data/uploads/
 !data/.gitkeep
 .env
 .env.*

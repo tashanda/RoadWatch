@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "RoadWatch | Smarter roads start with better data",
+  title: "RoadWatch | Road hazard dashboard",
   description:
-    "RoadWatch collects real-world motion and GPS data to help communities understand road conditions.",
+    "Explore community-reported road hazards and pothole detections around Tampa, Florida.",
 };
 
 export default function RootLayout({
