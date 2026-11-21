@@ -120,11 +120,15 @@ void sampleSensors() {
   const PotholeDetectorDebug& detectorDebug = potholeDetector.debug();
 
   if (detected) {
-    queueDetectedCandidate(
-        candidate,
-        gpsValid,
-        gpsValid ? gps.location.lat() : 0.0,
-        gpsValid ? gps.location.lng() : 0.0);
+    if (config::kNetworkDiagnosticMode) {
+      Serial.println("[diag] candidate suppressed; no device event sent");
+    } else {
+      queueDetectedCandidate(
+          candidate,
+          gpsValid,
+          gpsValid ? gps.location.lat() : 0.0,
+          gpsValid ? gps.location.lng() : 0.0);
+    }
   }
 
   const uint32_t nowMs = millis();
@@ -149,7 +153,12 @@ void setup() {
   Serial.println(config::kBno055Address, HEX);
   Serial.print("Detector debug mode: ");
   Serial.println(config::kDetectorDebug ? "enabled" : "disabled");
-  beginWifiUploader();
+  Serial.print("Network diagnostic mode: ");
+  Serial.println(config::kNetworkDiagnosticMode ? "enabled" : "disabled");
+  const bool uploaderStarted = beginWifiUploader();
+  Serial.println(uploaderStarted
+                     ? "[net] uploader task started"
+                     : "[net] uploader task not started");
   nextSampleMicros = micros();
 }
 

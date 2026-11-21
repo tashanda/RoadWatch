@@ -32,6 +32,10 @@
 #define ROADWATCH_DETECTOR_DEBUG 0
 #endif
 
+#ifndef ROADWATCH_DIAGNOSTIC_MODE
+#define ROADWATCH_DIAGNOSTIC_MODE 0
+#endif
+
 namespace config {
 
 constexpr uint32_t kSerialBaud = 460800;
@@ -40,6 +44,7 @@ constexpr int kI2cSdaPin = 25;
 constexpr int kI2cSclPin = 33;
 constexpr uint8_t kBno055Address = ROADWATCH_BNO055_ADDRESS;
 constexpr bool kDetectorDebug = ROADWATCH_DETECTOR_DEBUG != 0;
+constexpr bool kNetworkDiagnosticMode = ROADWATCH_DIAGNOSTIC_MODE != 0;
 
 constexpr int kGpsRxPin = 16;
 constexpr int kGpsTxPin = 17;

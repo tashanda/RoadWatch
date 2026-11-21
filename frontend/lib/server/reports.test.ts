@@ -235,6 +235,26 @@ describe("community report API", () => {
     expect(storeFactory).not.toHaveBeenCalled();
   });
 
+  it("rejects malformed diagnostic JSON without inserting an event", async () => {
+    process.env.ROADWATCH_DEVICE_TOKEN = "device-test-token";
+    const insertDeviceEvent = vi.fn();
+    const { store } = makeStore({ insertDeviceEvent });
+    const response = await ingestDeviceEvent(
+      new Request("https://roadwatch.example/api/device-events", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Device-Token": "device-test-token",
+        },
+        body: "{",
+      }),
+      () => store,
+    );
+
+    expect(response.status).toBe(400);
+    expect(insertDeviceEvent).not.toHaveBeenCalled();
+  });
+
   it("returns idempotent success for a repeated device event ID", async () => {
     process.env.ROADWATCH_DEVICE_TOKEN = "device-test-token";
     const event = {

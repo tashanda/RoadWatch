@@ -121,6 +121,28 @@ and browser-visible variables. Wi-Fi can be unavailable while driving; device
 events are queued only in RAM and are not guaranteed to survive power loss or
 queue saturation.
 
+For a no-record connectivity check, add `#define ROADWATCH_DIAGNOSTIC_MODE 1`
+to the local, ignored `firmware/include/secrets.h`, then build and flash. This
+mode suppresses sensor-event uploads, GETs `/api/health`, and sends deliberately
+invalid JSON to `/api/device-events` with the configured device token. The
+current handler validates the token before parsing JSON, then returns HTTP 400
+for this malformed body before inserting anything. Thus HTTP 400 for this
+specific probe means the token was accepted; HTTP 401 means it was rejected.
+Return the macro to `0` and reflash for normal event uploads.
+
+On Windows, replace `COM5` below with the port shown by PlatformIO:
+
+```powershell
+cd firmware
+.\.venv\Scripts\pio.exe device list
+.\.venv\Scripts\pio.exe run -e esp32dev -t upload --upload-port COM5
+.\.venv\Scripts\pio.exe device monitor --port COM5 --baud 460800
+```
+
+Serial output reports configuration omissions, Wi-Fi state, SNTP readiness,
+TLS transport errors, and HTTP status codes. Never paste the local
+`secrets.h` contents into logs or commit that file.
+
 ## 5. Test a photo report from iPhone Safari
 
 1. Confirm the Vercel deployment is HTTPS and its environment variables are

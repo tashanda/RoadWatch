@@ -40,11 +40,114 @@ bool wifiAttempted = false;
 bool timeSyncStarted = false;
 
 bool configured() {
-  return std::strlen(config::kWifiSsid) > 0 &&
-      std::strlen(config::kBackendUrl) > 0 &&
-      std::strncmp(config::kBackendUrl, "https://", 8) == 0 &&
-      std::strlen(config::kDeviceToken) > 0 &&
-      std::strlen(config::kBackendRootCa) > 0;
+  const bool hasWifiSsid = std::strlen(config::kWifiSsid) > 0;
+  const bool hasWifiPassword = std::strlen(config::kWifiPassword) > 0;
+  const bool hasBackendUrl = std::strlen(config::kBackendUrl) > 0;
+  const bool backendUsesHttps =
+      hasBackendUrl && std::strncmp(config::kBackendUrl, "https://", 8) == 0;
+  const bool hasDeviceToken = std::strlen(config::kDeviceToken) > 0;
+  const bool hasRootCa = std::strlen(config::kBackendRootCa) > 0;
+
+  if (!hasWifiSsid) Serial.println("[net] missing Wi-Fi SSID configuration");
+  if (!hasWifiPassword) Serial.println("[net] missing Wi-Fi password configuration");
+  if (!hasBackendUrl) Serial.println("[net] missing backend URL configuration");
+  if (hasBackendUrl && !backendUsesHttps) {
+    Serial.println("[net] backend URL must use HTTPS");
+  }
+  if (!hasDeviceToken) Serial.println("[net] missing device token configuration");
+  if (!hasRootCa) Serial.println("[net] missing TLS root CA configuration");
+
+  return hasWifiSsid && hasWifiPassword && backendUsesHttps &&
+      hasDeviceToken && hasRootCa;
+}
+
+bool systemTimeIsValid() {
+  return time(nullptr) >= static_cast<time_t>(kTimeSyncEpoch);
+}
+
+String makeEndpoint(const char* path) {
+  String endpoint(config::kBackendUrl);
+  while (endpoint.endsWith("/")) {
+    endpoint.remove(endpoint.length() - 1);
+  }
+  endpoint += path;
+  return endpoint;
+}
+
+void logHttpResult(
+    const char* operation,
+    int statusCode,
+    WiFiClientSecure& secureClient) {
+  if (statusCode >= 0) {
+    Serial.printf("[net] %s HTTP %d\n", operation, statusCode);
+    return;
+  }
+
+  char tlsError[160] = {};
+  const int tlsErrorCode = secureClient.lastError(tlsError, sizeof(tlsError));
+  const String transportError = HTTPClient::errorToString(statusCode);
+  Serial.printf(
+      "[net] %s transport error %d (%s); TLS error %d (%s)\n",
+      operation,
+      statusCode,
+      transportError.c_str(),
+      tlsErrorCode,
+      tlsError);
+}
+
+void startTimeSync() {
+  if (timeSyncStarted) return;
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  timeSyncStarted = true;
+  Serial.println("[net] SNTP sync started");
+}
+
+void runConnectivityDiagnostics() {
+  Serial.println("[diag] starting read-only health and no-record auth checks");
+
+  WiFiClientSecure healthClient;
+  healthClient.setCACert(config::kBackendRootCa);
+  HTTPClient healthRequest;
+  healthRequest.setTimeout(config::kHttpTimeoutMs);
+  if (!healthRequest.begin(healthClient, makeEndpoint("/api/health"))) {
+    Serial.println("[diag] could not initialize HTTPS health request");
+  } else {
+    const int healthStatus = healthRequest.GET();
+    logHttpResult("GET /api/health", healthStatus, healthClient);
+    healthRequest.end();
+  }
+
+  WiFiClientSecure authClient;
+  authClient.setCACert(config::kBackendRootCa);
+  HTTPClient authRequest;
+  authRequest.setTimeout(config::kHttpTimeoutMs);
+  if (!authRequest.begin(authClient, makeEndpoint("/api/device-events"))) {
+    Serial.println("[diag] could not initialize HTTPS device-event request");
+    return;
+  }
+
+  authRequest.addHeader("Content-Type", "application/json");
+  authRequest.addHeader("X-Device-Token", config::kDeviceToken);
+  const int authStatus = authRequest.POST("{");
+  if (authStatus == 400) {
+    Serial.println(
+        "[diag] device token accepted; deliberately malformed JSON rejected; "
+        "no event was stored");
+  } else if (authStatus == 401) {
+    Serial.println("[diag] device token rejected with HTTP 401");
+  } else if (authStatus == 403) {
+    Serial.println("[diag] device request forbidden with HTTP 403");
+  } else if (authStatus == 503) {
+    Serial.println("[diag] backend device ingestion is not configured (HTTP 503)");
+  } else {
+    logHttpResult("POST /api/device-events diagnostic", authStatus, authClient);
+  }
+  authRequest.end();
+}
+
+void logWifiConnected() {
+  Serial.print("[net] Wi-Fi connected; local IP=");
+  Serial.println(WiFi.localIP());
 }
 
 void makeEventId(char* output, size_t outputLength) {
@@ -63,7 +166,7 @@ void makeEventId(char* output, size_t outputLength) {
 
 bool timestampNow(char* output, size_t outputLength) {
   const time_t now = time(nullptr);
-  if (now < static_cast<time_t>(kTimeSyncEpoch)) {
+  if (!systemTimeIsValid()) {
     return false;
   }
   struct tm utcTime;
@@ -78,7 +181,7 @@ bool timestampForEvent(const QueuedEvent& event, char* output, size_t outputLeng
   }
 
   const time_t now = time(nullptr);
-  if (now < static_cast<time_t>(kTimeSyncEpoch)) return false;
+  if (!systemTimeIsValid()) return false;
   const uint32_t elapsedMs = millis() - event.createdAtMs;
   const time_t eventTime = now - static_cast<time_t>(elapsedMs / 1000);
   struct tm utcTime;
@@ -88,10 +191,7 @@ bool timestampForEvent(const QueuedEvent& event, char* output, size_t outputLeng
 
 bool connectWifi() {
   if (WiFi.status() == WL_CONNECTED) {
-    if (!timeSyncStarted) {
-      configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-      timeSyncStarted = true;
-    }
+    startTimeSync();
     return true;
   }
 
@@ -101,16 +201,18 @@ bool connectWifi() {
   }
   lastWifiAttempt = now;
   wifiAttempted = true;
+  Serial.println("[net] attempting Wi-Fi connection");
   WiFi.mode(WIFI_STA);
   WiFi.begin(config::kWifiSsid, config::kWifiPassword);
   for (uint8_t attempt = 0; attempt < 20; ++attempt) {
     if (WiFi.status() == WL_CONNECTED) {
-      configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-      timeSyncStarted = true;
+      logWifiConnected();
+      startTimeSync();
       return true;
     }
     vTaskDelay(pdMS_TO_TICKS(500));
   }
+  Serial.printf("[net] Wi-Fi connection timed out; status=%d\n", WiFi.status());
   return false;
 }
 
@@ -119,13 +221,9 @@ bool postEvent(const QueuedEvent& event) {
   secureClient.setCACert(config::kBackendRootCa);
 
   HTTPClient http;
-  String endpoint(config::kBackendUrl);
-  while (endpoint.endsWith("/")) {
-    endpoint.remove(endpoint.length() - 1);
-  }
-  endpoint += "/api/device-events";
   http.setTimeout(config::kHttpTimeoutMs);
-  if (!http.begin(secureClient, endpoint)) {
+  if (!http.begin(secureClient, makeEndpoint("/api/device-events"))) {
+    Serial.println("[net] could not initialize HTTPS event request");
     return false;
   }
   http.addHeader("Content-Type", "application/json");
@@ -165,6 +263,7 @@ bool postEvent(const QueuedEvent& event) {
   String body;
   serializeJson(document, body);
   const int statusCode = http.POST(body);
+  logHttpResult("POST /api/device-events", statusCode, secureClient);
   http.end();
   return statusCode == HTTP_CODE_OK || statusCode == HTTP_CODE_ACCEPTED;
 }
@@ -172,9 +271,37 @@ bool postEvent(const QueuedEvent& event) {
 void uploaderTask(void*) {
   QueuedEvent event{};
   bool hasPendingEvent = false;
+  bool diagnosticsRun = false;
+  bool clockWaitLogged = false;
+  bool clockReadyLogged = false;
+  uint32_t lastClockWaitLog = 0;
   while (true) {
     if (!connectWifi()) {
       vTaskDelay(pdMS_TO_TICKS(1000));
+      continue;
+    }
+
+    if (!systemTimeIsValid()) {
+      const uint32_t now = millis();
+      if (!clockWaitLogged || now - lastClockWaitLog >= 5000) {
+        Serial.println("[net] waiting for valid SNTP time before HTTPS");
+        clockWaitLogged = true;
+        lastClockWaitLog = now;
+      }
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      continue;
+    }
+    if (!clockReadyLogged) {
+      Serial.println("[net] system time is valid");
+      clockReadyLogged = true;
+    }
+
+    if (config::kNetworkDiagnosticMode) {
+      if (!diagnosticsRun) {
+        runConnectivityDiagnostics();
+        diagnosticsRun = true;
+      }
+      vTaskDelay(pdMS_TO_TICKS(5000));
       continue;
     }
 
@@ -222,18 +349,23 @@ bool beginWifiUploader() {
   if (uploadQueue == nullptr) {
     uploadQueue = xQueueCreate(kQueueLength, sizeof(QueuedEvent));
     if (uploadQueue == nullptr) {
+      Serial.println("[net] could not allocate event queue");
       return false;
     }
   }
-  return xTaskCreatePinnedToCore(
-             uploaderTask,
-             "roadwatch-uploader",
-             8192,
-             nullptr,
-             1,
-             nullptr,
-             0
-         ) == pdPASS;
+  const BaseType_t taskCreated = xTaskCreatePinnedToCore(
+      uploaderTask,
+      "roadwatch-uploader",
+      8192,
+      nullptr,
+      1,
+      nullptr,
+      0);
+  if (taskCreated != pdPASS) {
+    Serial.println("[net] could not start uploader task");
+    return false;
+  }
+  return true;
 }
 
 bool queueCandidate(

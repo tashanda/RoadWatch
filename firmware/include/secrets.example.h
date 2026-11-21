@@ -8,3 +8,5 @@
 #define ROADWATCH_DEVICE_TOKEN ""
 // Set to 1 to emit BNO055 calibration and detector samples at the debug rate.
 #define ROADWATCH_DETECTOR_DEBUG 0
+// Set to 1 for a no-record Wi-Fi/TLS/API check; it suppresses event uploads.
+#define ROADWATCH_DIAGNOSTIC_MODE 0
