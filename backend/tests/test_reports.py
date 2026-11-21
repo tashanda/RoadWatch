@@ -161,6 +161,9 @@ def test_device_event_ingestion_is_authenticated_and_idempotent(client, monkeypa
         "sensor_summary": "Acceleration candidate; GPS fix unavailable.",
         "severity": "medium",
         "event_type": "pothole",
+        "impact_magnitude": 8.2,
+        "source": "esp32_sensor",
+        "status": "unverified",
     }
     assert client.post("/api/device-events", json=payload).status_code == 401
     headers = {"X-Device-Token": "test-device-token"}
@@ -169,6 +172,9 @@ def test_device_event_ingestion_is_authenticated_and_idempotent(client, monkeypa
     assert first.status_code == 202
     assert first.json()["duplicate"] is False
     assert first.json()["event"]["latitude"] is None
+    assert first.json()["event"]["impact_magnitude"] == 8.2
+    assert first.json()["event"]["source"] == "esp32_sensor"
+    assert first.json()["event"]["status"] == "unverified"
     assert second.status_code == 202
     assert second.json()["duplicate"] is True
     assert client.get("/api/device-events").json()["total"] == 1
@@ -197,6 +203,24 @@ def test_device_event_rejects_partial_coordinates(client, monkeypatch):
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "latitude": 27.9,
         "sensor_summary": "candidate",
+    }
+    response = client.post(
+        "/api/device-events",
+        json=payload,
+        headers={"X-Device-Token": "test-device-token"},
+    )
+    assert response.status_code == 422
+
+
+def test_device_event_rejects_invalid_sensor_metadata(client, monkeypatch):
+    monkeypatch.setenv("ROADWATCH_DEVICE_TOKEN", "test-device-token")
+    payload = {
+        "event_id": str(uuid4()),
+        "device_id": "roadwatch-01",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "sensor_summary": "candidate",
+        "impact_magnitude": -1,
+        "source": "unknown",
     }
     response = client.post(
         "/api/device-events",

@@ -68,6 +68,10 @@ export function HazardMap({ events }: { events: MapHazard[] }) {
               </p>
               <p>{formatTimestamp(event.timestamp)}</p>
               {event.status && <p>Status: {event.status}</p>}
+              {event.detection_source && <p>Detection source: ESP32 sensor</p>}
+              {event.impact_magnitude !== undefined && event.impact_magnitude !== null && (
+                <p>Impact magnitude: {event.impact_magnitude.toFixed(2)} m/s²</p>
+              )}
               {event.sensor_summary && <p>{event.sensor_summary}</p>}
               {event.simulated && (
                 <p className="font-medium text-amber-700">Simulated example</p>

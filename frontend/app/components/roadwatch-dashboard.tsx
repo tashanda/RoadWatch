@@ -32,12 +32,6 @@ const HazardMap = dynamic(
   { ssr: false, loading: () => <div className="map-loading">Loading map…</div> },
 );
 
-const apiBaseUrl = (
-  process.env.NEXT_PUBLIC_API_URL ??
-    process.env.NEXT_PUBLIC_ROADWATCH_API_URL ??
-    "http://127.0.0.1:8000"
-).replace(/\/$/, "");
-
 const filters: { label: string; value: SeverityFilter }[] = [
   { label: "All events", value: "all" },
   { label: "High", value: "high" },
@@ -96,9 +90,9 @@ export function RoadWatchDashboard() {
     try {
       const requestOptions = { cache: "no-store" as RequestCache, signal };
       const [eventsResponse, reportsResponse, deviceEventsResponse] = await Promise.all([
-        fetch(`${apiBaseUrl}/api/events?limit=500`, requestOptions),
-        fetch(`${apiBaseUrl}/api/reports?limit=500`, requestOptions),
-        fetch(`${apiBaseUrl}/api/device-events?limit=500`, requestOptions),
+        fetch("/api/events?limit=500", requestOptions),
+        fetch("/api/reports?limit=500", requestOptions),
+        fetch("/api/device-events?limit=500", requestOptions),
       ]);
       const failedResponse = [eventsResponse, reportsResponse, deviceEventsResponse].find(
         (response) => !response.ok,
@@ -126,9 +120,7 @@ export function RoadWatchDashboard() {
         simulated: false,
         source: "community",
         description: report.description,
-        photo_url: report.photo_url.startsWith("http")
-          ? report.photo_url
-          : `${apiBaseUrl}${report.photo_url}`,
+        photo_url: report.photo_url,
         status: report.status,
       }));
       const deviceHazards: MapHazard[] = deviceEventsResult.items.flatMap((event) => {
@@ -150,6 +142,9 @@ export function RoadWatchDashboard() {
           simulated: false,
           source: "sensor",
           sensor_summary: event.sensor_summary,
+          status: event.status,
+          impact_magnitude: event.impact_magnitude,
+          detection_source: event.source,
         }];
       });
       setHazards([...reportHazards, ...sensorHazards, ...deviceHazards]);
@@ -203,7 +198,7 @@ export function RoadWatchDashboard() {
     if (!window.confirm(`Clear ${simulatedCount} simulated detections?`)) return;
     setClearing(true);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/events/simulated`, {
+      const response = await fetch("/api/events/simulated", {
         method: "DELETE",
       });
       if (!response.ok) {
@@ -441,7 +436,6 @@ export function RoadWatchDashboard() {
       </section>
       {reportOpen && (
         <ReportForm
-          apiBaseUrl={apiBaseUrl}
           onClose={() => setReportOpen(false)}
           onSubmitted={() => void refreshEvents()}
         />

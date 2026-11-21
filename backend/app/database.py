@@ -71,6 +71,9 @@ device_events = Table(
     Column("sensor_summary", String(500), nullable=False),
     Column("severity", String(10), nullable=True),
     Column("event_type", String(20), nullable=True),
+    Column("impact_magnitude", Float, nullable=True),
+    Column("source", String(20), nullable=False, default="esp32_sensor"),
+    Column("status", String(20), nullable=False, default="unverified"),
     Column("received_at", DateTime(timezone=True), nullable=False),
     CheckConstraint(
         "latitude IS NULL OR (latitude >= -90 AND latitude <= 90)",
@@ -130,7 +133,32 @@ def connect() -> Iterator[Connection]:
 
 
 def initialize_database() -> None:
-    metadata.create_all(get_engine())
+    engine = get_engine()
+    metadata.create_all(engine)
+    if engine.dialect.name == "sqlite":
+        with engine.begin() as connection:
+            columns = {
+                row[1]
+                for row in connection.execute(text("PRAGMA table_info(device_events)"))
+            }
+            if "impact_magnitude" not in columns:
+                connection.execute(
+                    text("ALTER TABLE device_events ADD COLUMN impact_magnitude FLOAT")
+                )
+            if "source" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE device_events ADD COLUMN source VARCHAR(20) "
+                        "NOT NULL DEFAULT 'esp32_sensor'"
+                    )
+                )
+            if "status" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE device_events ADD COLUMN status VARCHAR(20) "
+                        "NOT NULL DEFAULT 'unverified'"
+                    )
+                )
 
 
 def event_from_row(row: Any) -> dict[str, Any]:

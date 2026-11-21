@@ -468,6 +468,9 @@ def ingest_device_event(
                 sensor_summary=payload.sensor_summary,
                 severity=payload.severity,
                 event_type=payload.event_type,
+                impact_magnitude=payload.impact_magnitude,
+                source=payload.source,
+                status=payload.status,
                 received_at=received_at,
             )
             .on_conflict_do_nothing(index_elements=[device_events.c.event_id])

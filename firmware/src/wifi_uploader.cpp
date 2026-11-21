@@ -25,8 +25,11 @@ struct QueuedEvent {
   char eventType[20];
   double latitude;
   double longitude;
+  float impactMagnitudeMps2;
+  uint32_t createdAtMs;
   bool gpsValid;
   bool classified;
+  bool impactMagnitudeValid;
 };
 
 QueueHandle_t uploadQueue = nullptr;
@@ -65,6 +68,21 @@ bool timestampNow(char* output, size_t outputLength) {
   }
   struct tm utcTime;
   gmtime_r(&now, &utcTime);
+  return strftime(output, outputLength, "%Y-%m-%dT%H:%M:%SZ", &utcTime) > 0;
+}
+
+bool timestampForEvent(const QueuedEvent& event, char* output, size_t outputLength) {
+  if (event.timestamp[0] != '\0') {
+    strlcpy(output, event.timestamp, outputLength);
+    return true;
+  }
+
+  const time_t now = time(nullptr);
+  if (now < static_cast<time_t>(kTimeSyncEpoch)) return false;
+  const uint32_t elapsedMs = millis() - event.createdAtMs;
+  const time_t eventTime = now - static_cast<time_t>(elapsedMs / 1000);
+  struct tm utcTime;
+  gmtime_r(&eventTime, &utcTime);
   return strftime(output, outputLength, "%Y-%m-%dT%H:%M:%SZ", &utcTime) > 0;
 }
 
@@ -116,8 +134,20 @@ bool postEvent(const QueuedEvent& event) {
   JsonDocument document;
   document["event_id"] = event.eventId;
   document["device_id"] = config::kDeviceId;
-  document["timestamp"] = event.timestamp;
+  char timestamp[25];
+  if (!timestampForEvent(event, timestamp, sizeof(timestamp))) {
+    http.end();
+    return false;
+  }
+  document["timestamp"] = timestamp;
   document["sensor_summary"] = event.summary;
+  document["source"] = "esp32_sensor";
+  document["status"] = "unverified";
+  if (event.impactMagnitudeValid) {
+    document["impact_magnitude"] = event.impactMagnitudeMps2;
+  } else {
+    document["impact_magnitude"] = nullptr;
+  }
   if (event.gpsValid) {
     document["latitude"] = event.latitude;
     document["longitude"] = event.longitude;
@@ -141,13 +171,22 @@ bool postEvent(const QueuedEvent& event) {
 
 void uploaderTask(void*) {
   QueuedEvent event{};
+  bool hasPendingEvent = false;
   while (true) {
     if (!connectWifi()) {
       vTaskDelay(pdMS_TO_TICKS(1000));
       continue;
     }
 
-    if (xQueueReceive(uploadQueue, &event, pdMS_TO_TICKS(1000)) != pdTRUE) {
+    if (!hasPendingEvent) {
+      if (xQueueReceive(uploadQueue, &event, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        continue;
+      }
+      hasPendingEvent = true;
+    }
+
+    if (WiFi.status() != WL_CONNECTED) {
+      vTaskDelay(pdMS_TO_TICKS(1000));
       continue;
     }
 
@@ -168,6 +207,9 @@ void uploaderTask(void*) {
       portENTER_CRITICAL(&uploadStatsMux);
       ++failedUploads;
       portEXIT_CRITICAL(&uploadStatsMux);
+      vTaskDelay(pdMS_TO_TICKS(config::kUploadRetryDelayMs));
+    } else {
+      hasPendingEvent = false;
     }
   }
 }
@@ -200,7 +242,8 @@ bool queueCandidate(
     double latitude,
     double longitude,
     const char* severity,
-    const char* eventType
+    const char* eventType,
+    float impactMagnitudeMps2
 ) {
   QueuedEvent event{};
   if (uploadQueue == nullptr || sensorSummary == nullptr ||
@@ -222,11 +265,15 @@ bool queueCandidate(
        latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180)) {
     return false;
   }
-
-  makeEventId(event.eventId, sizeof(event.eventId));
-  if (!timestampNow(event.timestamp, sizeof(event.timestamp))) {
+  if (
+      !std::isfinite(impactMagnitudeMps2) ||
+      (impactMagnitudeMps2 < 0.0f && impactMagnitudeMps2 != -1.0f)) {
     return false;
   }
+
+  makeEventId(event.eventId, sizeof(event.eventId));
+  timestampNow(event.timestamp, sizeof(event.timestamp));
+  event.createdAtMs = millis();
   strlcpy(event.summary, sensorSummary, sizeof(event.summary));
   if (classified) {
     strlcpy(event.severity, severity, sizeof(event.severity));
@@ -236,6 +283,9 @@ bool queueCandidate(
   event.longitude = longitude;
   event.gpsValid = gpsValid;
   event.classified = classified;
+  event.impactMagnitudeValid = impactMagnitudeMps2 >= 0.0f;
+  event.impactMagnitudeMps2 =
+      event.impactMagnitudeValid ? impactMagnitudeMps2 : 0.0f;
   return xQueueSend(uploadQueue, &event, 0) == pdTRUE;
 }
 

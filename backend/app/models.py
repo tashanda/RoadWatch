@@ -71,6 +71,9 @@ class DeviceEventCreate(BaseModel):
     sensor_summary: str = Field(min_length=1, max_length=500)
     severity: Severity | None = None
     event_type: EventType | None = None
+    impact_magnitude: float | None = Field(default=None, ge=0, le=200)
+    source: Literal["esp32_sensor"] = "esp32_sensor"
+    status: Literal["unverified"] = "unverified"
 
     @model_validator(mode="after")
     def validate_coordinates_and_classification(self):

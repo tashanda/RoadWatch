@@ -26,12 +26,22 @@
 #define ROADWATCH_BACKEND_ROOT_CA ""
 #endif
 
+#ifndef ROADWATCH_BNO055_ADDRESS
+#define ROADWATCH_BNO055_ADDRESS 0x28
+#endif
+
+#ifndef ROADWATCH_DETECTOR_DEBUG
+#define ROADWATCH_DETECTOR_DEBUG 0
+#endif
+
 namespace config {
 
 constexpr uint32_t kSerialBaud = 460800;
 
-constexpr int kI2cSdaPin = 21;
-constexpr int kI2cSclPin = 22;
+constexpr int kI2cSdaPin = 25;
+constexpr int kI2cSclPin = 33;
+constexpr uint8_t kBno055Address = ROADWATCH_BNO055_ADDRESS;
+constexpr bool kDetectorDebug = ROADWATCH_DETECTOR_DEBUG != 0;
 
 constexpr int kGpsRxPin = 16;
 constexpr int kGpsTxPin = 17;
@@ -48,4 +58,5 @@ constexpr const char* kDeviceId = "roadwatch-esp32-01";
 constexpr uint32_t kWifiReconnectIntervalMs = 15000;
 constexpr uint32_t kHttpTimeoutMs = 5000;
 constexpr uint8_t kUploadRetryLimit = 5;
+constexpr uint32_t kUploadRetryDelayMs = 30000;
 }

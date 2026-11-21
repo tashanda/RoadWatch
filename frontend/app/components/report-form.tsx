@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { createClient } from "@supabase/supabase-js";
 import { Camera, CheckCircle2, LocateFixed, MapPin, Upload, X } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 
@@ -18,11 +19,9 @@ const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
 const maximumPhotoSize = 5 * 1024 * 1024;
 
 export function ReportForm({
-  apiBaseUrl,
   onClose,
   onSubmitted,
 }: {
-  apiBaseUrl: string;
   onClose: () => void;
   onSubmitted: () => void;
 }) {
@@ -35,6 +34,7 @@ export function ReportForm({
   const [severity, setSeverity] = useState<Severity>("medium");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [submissionStage, setSubmissionStage] = useState("");
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const libraryInput = useRef<HTMLInputElement>(null);
@@ -105,31 +105,78 @@ export function ReportForm({
       return;
     }
 
-    const payload = new FormData();
-    payload.set("photo", photo);
-    payload.set("latitude", String(location.latitude));
-    payload.set("longitude", String(location.longitude));
-    payload.set("severity", severity);
-    payload.set("description", description);
+    let uploadId: string | null = null;
     setSubmitting(true);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/reports`, {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error("Photo reporting is not configured for this website.");
+      }
+
+      setSubmissionStage("Preparing a secure photo upload…");
+      const uploadResponse = await fetch("/api/reports/upload", {
         method: "POST",
-        body: payload,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content_type: photo.type, size: photo.size }),
+      });
+      if (!uploadResponse.ok) {
+        throw await responseError(uploadResponse, "Could not start the photo upload.");
+      }
+      const upload = (await uploadResponse.json()) as {
+        upload_id: string;
+        path: string;
+        token: string;
+        bucket: string;
+      };
+      uploadId = upload.upload_id;
+
+      setSubmissionStage("Uploading photo securely…");
+      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+      const { error: uploadError } = await supabase.storage
+        .from(upload.bucket)
+        .uploadToSignedUrl(upload.path, upload.token, photo, {
+          contentType: photo.type,
+          upsert: false,
+        });
+      if (uploadError) {
+        throw new Error(`Photo upload failed: ${uploadError.message}`);
+      }
+
+      setSubmissionStage("Saving report details…");
+      const response = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          upload_id: upload.upload_id,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          severity,
+          description,
+        }),
       });
       if (!response.ok) {
-        const result = (await response.json().catch(() => null)) as
-          | { detail?: unknown }
-          | null;
-        const message =
-          typeof result?.detail === "string"
-            ? result.detail
-            : `Report submission failed (HTTP ${response.status}).`;
-        throw new Error(message);
+        throw await responseError(response, "Report submission failed.");
       }
+      uploadId = null;
       setSubmitted(true);
       onSubmitted();
     } catch (requestError) {
+      if (uploadId) {
+        try {
+          const cancelResponse = await fetch(`/api/reports/upload/${uploadId}`, {
+            method: "DELETE",
+          });
+          if (!cancelResponse.ok && cancelResponse.status !== 404) {
+            console.error("Could not cancel incomplete photo upload.", cancelResponse.status);
+          }
+        } catch (cancelError) {
+          console.error(
+            "Could not cancel incomplete photo upload.",
+            cancelError instanceof Error ? cancelError.message : "Unknown error",
+          );
+        }
+      }
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -137,6 +184,7 @@ export function ReportForm({
       );
     } finally {
       setSubmitting(false);
+      setSubmissionStage("");
     }
   }
 
@@ -296,12 +344,28 @@ export function ReportForm({
             </label>
 
             {error && <p className="report-error" role="alert">{error}</p>}
+            {submitting && (
+              <p className="report-hint" role="status" aria-live="polite">
+                {submissionStage}
+              </p>
+            )}
             <button className="report-submit-button" disabled={submitting} type="submit">
-              {submitting ? "Uploading photo and saving report…" : "Submit pothole report"}
+              {submitting ? "Submitting report…" : "Submit pothole report"}
             </button>
           </form>
         )}
       </section>
     </div>
   );
+}
+
+async function responseError(response: Response, fallback: string): Promise<Error> {
+  const result = (await response.json().catch(() => null)) as
+    | { detail?: unknown }
+    | null;
+  const message =
+    typeof result?.detail === "string"
+      ? result.detail
+      : `${fallback} (HTTP ${response.status}).`;
+  return new Error(message);
 }

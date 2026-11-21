@@ -32,6 +32,9 @@ export type DeviceEvent = {
   sensor_summary: string;
   severity: Severity | null;
   event_type: RoadEvent["event_type"] | null;
+  impact_magnitude: number | null;
+  source: "esp32_sensor";
+  status: "unverified";
   received_at: string;
 };
 
@@ -48,6 +51,8 @@ export type MapHazard = {
   photo_url?: string;
   status?: "unverified";
   sensor_summary?: string;
+  impact_magnitude?: number | null;
+  detection_source?: "esp32_sensor";
 };
 
 export type EventListResponse = {
