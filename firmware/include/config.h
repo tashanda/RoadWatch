@@ -27,10 +27,11 @@
 #endif
 
 namespace config {
+
 constexpr uint32_t kSerialBaud = 460800;
 
-constexpr int kI2cSdaPin = 21;
-constexpr int kI2cSclPin = 22;
+constexpr int kI2cSdaPin = 25;
+constexpr int kI2cSclPin = 33;
 
 constexpr int kGpsRxPin = 16;
 constexpr int kGpsTxPin = 17;
