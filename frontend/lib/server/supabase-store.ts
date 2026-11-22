@@ -49,6 +49,47 @@ export type DeviceEventRow = {
   received_at: string;
 };
 
+export type Vector3 = [number | null, number | null, number | null];
+
+export type TelemetryPayload = {
+  imu_valid: boolean | null;
+  orientation_valid: boolean | null;
+  gps_valid: boolean | null;
+  calibration: {
+    system: number | null;
+    accel: number | null;
+    gyro: number | null;
+    mag: number | null;
+  };
+  linear_accel_m_s2: Vector3 | null;
+  raw_accel_m_s2: Vector3 | null;
+  gyro_rad_s: Vector3 | null;
+  orientation_deg: Vector3 | null;
+  vertical_accel_m_s2: number | null;
+  jerk_m_s3: number | null;
+  vibration_rms_m_s2: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  peak: {
+    vertical_accel_m_s2: number | null;
+    jerk_m_s3: number | null;
+    vibration_rms_m_s2: number | null;
+  };
+  samples_in_window: number | null;
+  malformed_lines: number | null;
+  last_detection: {
+    timestamp: string;
+    severity: Severity;
+    impact_m_s2: number | null;
+  } | null;
+};
+
+export type TelemetryRow = {
+  device_id: string;
+  payload: TelemetryPayload;
+  received_at: string;
+};
+
 export type ReadinessClient = {
   from: (table: string) => {
     select: (
@@ -107,6 +148,8 @@ export interface RoadWatchStore {
     items: DeviceEventRow[];
     total: number;
   }>;
+  upsertTelemetry(row: TelemetryRow): Promise<void>;
+  latestTelemetry(): Promise<TelemetryRow | null>;
 }
 
 function requiredEnvironment(name: string): string {
@@ -358,6 +401,24 @@ export function createSupabaseStore(
         .limit(limit);
       throwOnError(error);
       return { items: (data ?? []) as DeviceEventRow[], total: count ?? 0 };
+    },
+
+    async upsertTelemetry(row) {
+      const { error } = await client
+        .from("device_telemetry")
+        .upsert(row, { onConflict: "device_id" });
+      throwOnError(error);
+    },
+
+    async latestTelemetry() {
+      const { data, error } = await client
+        .from("device_telemetry")
+        .select("*")
+        .order("received_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      throwOnError(error);
+      return data as TelemetryRow | null;
     },
   };
 }

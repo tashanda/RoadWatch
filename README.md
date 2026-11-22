@@ -96,6 +96,8 @@ The test suite uses a temporary SQLite database and does not change your local d
 - `GET /api/reports/{id}/photo` — redirect to a short-lived URL for a private, EXIF-stripped JPEG
 - `POST /api/device-events` — authenticated ESP32 event ingestion
 - `GET /api/device-events` — accepted device events
+- `POST /api/telemetry` — authenticated live sensor snapshot from `backend/scripts/serial_bridge.py`
+- `GET /api/telemetry` — latest live sensor snapshot for the dashboard (requires the `device_telemetry` table from `supabase/migrations/20261121230000_roadwatch_device_telemetry.sql`)
 
 The Next.js report handlers validate JPG, PNG, and WebP photo content (maximum 5 MB), coordinates, severity, and a 500-character description. They re-encode photos to JPEG to strip EXIF metadata, generate UUID-based storage keys, rate-limit uploads, and mark reports `source=community` and `status=unverified`. The photo itself is uploaded directly to Supabase Storage using a short-lived signed URL to avoid Vercel request-body limits. Phone GPS only suggests a location; reporters must place or adjust the pin on the map.
 

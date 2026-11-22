@@ -1798,3 +1798,110 @@ button {
     padding-left: 17px;
   }
 }
+
+/* Live sensor telemetry */
+.telemetry-panel {
+  overflow: hidden;
+  margin-bottom: 17px;
+  border: 1px solid #e8eeea;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(22 53 39 / 2%);
+}
+
+.telemetry-heading {
+  flex-wrap: wrap;
+  border-bottom: 1px solid #edf0ed;
+}
+
+.telemetry-tag-offline {
+  border-color: #f3dcd9;
+  background: #fff5f4;
+  color: #c2564d;
+}
+
+.telemetry-tag-offline .offline-dot {
+  width: 5px;
+  height: 5px;
+  box-shadow: none;
+}
+
+.telemetry-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6f7d76;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: #edf0ed;
+}
+
+.telemetry-tile {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  background: #fff;
+  padding: 13px 18px;
+}
+
+.telemetry-label {
+  color: #728078;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.telemetry-tile strong {
+  color: #20352d;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+}
+
+.telemetry-tile strong small {
+  color: #8a9690;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.telemetry-tile strong.telemetry-axes {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  letter-spacing: 0;
+  white-space: pre-wrap;
+}
+
+.telemetry-sub {
+  color: #9aa49f;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.telemetry-stale .telemetry-tile strong {
+  color: #a3ada8;
+}
+
+.event-coords-unlocated {
+  color: #b07a2e;
+}
+
+@media (max-width: 1100px) {
+  .telemetry-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .telemetry-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

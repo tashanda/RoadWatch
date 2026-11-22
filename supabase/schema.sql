@@ -53,6 +53,12 @@ create table if not exists public.api_rate_limits (
   request_count integer not null check (request_count > 0)
 );
 
+create table if not exists public.device_telemetry (
+  device_id text primary key check (char_length(device_id) between 1 and 80),
+  payload jsonb not null,
+  received_at timestamptz not null
+);
+
 create index if not exists events_timestamp_id_idx
   on public.events (timestamp desc, id desc);
 create index if not exists community_reports_created_at_idx
@@ -65,6 +71,7 @@ alter table public.community_reports enable row level security;
 alter table public.device_events enable row level security;
 alter table public.report_upload_tickets enable row level security;
 alter table public.api_rate_limits enable row level security;
+alter table public.device_telemetry enable row level security;
 
 revoke all on public.events, public.community_reports, public.device_events,
   public.report_upload_tickets, public.api_rate_limits from anon, authenticated;
@@ -75,6 +82,8 @@ grant select, insert, delete on public.events to service_role;
 grant select, insert on public.community_reports, public.device_events to service_role;
 grant select, insert, update, delete on public.report_upload_tickets to service_role;
 grant select on public.api_rate_limits to service_role;
+revoke all on public.device_telemetry from anon, authenticated, service_role;
+grant select, insert, update on public.device_telemetry to service_role;
 revoke all on sequence public.events_id_seq from service_role;
 grant usage on sequence public.events_id_seq to service_role;
 

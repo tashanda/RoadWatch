@@ -63,6 +63,8 @@ function makeStore(overrides: Partial<RoadWatchStore> = {}) {
       conflict: false,
     }),
     listDeviceEvents: async () => ({ items: [], total: 0 }),
+    upsertTelemetry: async () => {},
+    latestTelemetry: async () => null,
     ...overrides,
   };
   return { store: defaults, uploaded, removed, getReport: () => report };

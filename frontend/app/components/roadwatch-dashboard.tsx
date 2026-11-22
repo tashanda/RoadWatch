@@ -7,6 +7,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Clock3,
+  Cpu,
   Filter,
   MapPin,
   Radio,
@@ -18,11 +19,13 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { DriveMode } from "./drive-mode";
+import { LiveTelemetry } from "./live-telemetry";
 import { ReportForm } from "./report-form";
 import type {
   CommunityReportListResponse,
   DeviceEventListResponse,
   EventListResponse,
+  Hazard,
   MapHazard,
   SeverityFilter,
 } from "./types";
@@ -66,7 +69,11 @@ function relativeTime(timestamp: string) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function severityClass(severity: MapHazard["severity"]) {
+function isLocated(hazard: Hazard): hazard is MapHazard {
+  return hazard.latitude !== null && hazard.longitude !== null;
+}
+
+function severityClass(severity: Hazard["severity"]) {
   return `severity-${severity}`;
 }
 
@@ -77,7 +84,7 @@ function formatCoordinates(latitude: number, longitude: number) {
 }
 
 export function RoadWatchDashboard() {
-  const [hazards, setHazards] = useState<MapHazard[]>([]);
+  const [hazards, setHazards] = useState<Hazard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -123,13 +130,10 @@ export function RoadWatchDashboard() {
         photo_url: report.photo_url,
         status: report.status,
       }));
-      const deviceHazards: MapHazard[] = deviceEventsResult.items.flatMap((event) => {
-        if (
-          event.latitude === null ||
-          event.longitude === null ||
-          event.severity === null ||
-          event.event_type === null
-        ) {
+      // Detections without a GPS fix keep null coordinates: they count in the
+      // statistics and the recent list but are filtered out of the map.
+      const deviceHazards: Hazard[] = deviceEventsResult.items.flatMap((event) => {
+        if (event.severity === null || event.event_type === null) {
           return [];
         }
         return [{
@@ -147,7 +151,11 @@ export function RoadWatchDashboard() {
           detection_source: event.source,
         }];
       });
-      setHazards([...reportHazards, ...sensorHazards, ...deviceHazards]);
+      setHazards(
+        [...reportHazards, ...sensorHazards, ...deviceHazards].sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+        ),
+      );
       setError("");
       setLastUpdated(new Date());
     } catch (requestError) {
@@ -185,6 +193,9 @@ export function RoadWatchDashboard() {
       }),
     [filter, hazards, sourceFilter],
   );
+  const mapHazards = useMemo(() => hazards.filter(isLocated), [hazards]);
+  const visibleMapHazards = useMemo(() => visibleHazards.filter(isLocated), [visibleHazards]);
+  const unlocatedCount = hazards.length - mapHazards.length;
   const potholes = hazards.filter((hazard) => hazard.event_type === "pothole");
   const highSeverity = hazards.filter((hazard) => hazard.severity === "high");
   const recentEvents = hazards.filter(
@@ -230,6 +241,10 @@ export function RoadWatchDashboard() {
           <a className="nav-link nav-link-active" href="#overview">
             <Activity size={18} />
             <span>Overview</span>
+          </a>
+          <a className="nav-link" href="#live-sensor">
+            <Cpu size={18} />
+            <span>Live sensor</span>
           </a>
           <a className="nav-link" href="#live-map">
             <MapPin size={18} />
@@ -327,7 +342,9 @@ export function RoadWatchDashboard() {
             </div>
           )}
 
-          <DriveMode hazards={hazards} />
+          <LiveTelemetry />
+
+          <DriveMode hazards={mapHazards} />
 
           <section className="map-panel" id="live-map">
             <div className="panel-heading map-heading">
@@ -339,9 +356,9 @@ export function RoadWatchDashboard() {
             </div>
             <div className="map-layout">
               <div className="map-canvas">
-                <HazardMap events={visibleHazards} />
+                <HazardMap events={visibleMapHazards} />
                 {loading && <div className="map-overlay"><span className="loading-spinner" /> Loading detections…</div>}
-                {!loading && visibleHazards.length === 0 && !error && (
+                {!loading && visibleMapHazards.length === 0 && !error && (
                   <div className="map-overlay map-empty"><MapPin size={22} /><strong>No detections in this view</strong><span>Seed development data or check back later.</span></div>
                 )}
               </div>
@@ -360,7 +377,10 @@ export function RoadWatchDashboard() {
             <div className="panel-heading detections-heading">
               <div>
                 <h2>Recent hazards <span className="count-pill">{visibleHazards.length}</span></h2>
-                <p>{communityCount} community photo reports · sensor detections shown separately</p>
+                <p>
+                  {communityCount} community photo reports · sensor detections shown separately
+                  {unlocatedCount > 0 && ` · ${unlocatedCount} without GPS (not on map)`}
+                </p>
               </div>
               <div className="filter-groups">
                 <div className="filter-control"><Filter size={15} /><span>Source</span>
@@ -412,7 +432,14 @@ export function RoadWatchDashboard() {
                         </span>
                         {event.simulated && <span className="simulated-tag">SIMULATED</span>}
                       </div>
-                      <div className="event-coords">{formatCoordinates(event.latitude, event.longitude)}</div>
+                      {isLocated(event) ? (
+                        <div className="event-coords">{formatCoordinates(event.latitude, event.longitude)}</div>
+                      ) : (
+                        <div className="event-coords event-coords-unlocated">No GPS fix · not shown on map</div>
+                      )}
+                      {event.impact_magnitude != null && (
+                        <div className="event-description">Impact {event.impact_magnitude.toFixed(2)} m/s²</div>
+                      )}
                       {event.description && <div className="event-description">{event.description}</div>}
                     </div>
                     <span className={`severity-pill ${severityClass(event.severity)}`}>
